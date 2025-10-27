@@ -101,11 +101,25 @@ async def app_lifespan(app: FastAPI):
             print("Loading database schemas...")
             print("="*80)
             try:
+                import asyncio
                 from core.globals import dbs_info, fetch_table_description, databases_dict
-                dbs_info()  # Load all databases from db_schema table
-                fetch_table_description()  # Load table descriptions
-                print(f"✓ Loaded {len(databases_dict)} databases from db_schema")
-                print(f"  Available databases: {', '.join(databases_dict.keys())}")
+
+                # Try with timeout to prevent startup hanging
+                try:
+                    await asyncio.wait_for(
+                        asyncio.to_thread(dbs_info),  # Load all databases from db_schema table
+                        timeout=30.0  # 30 second timeout
+                    )
+                    await asyncio.wait_for(
+                        asyncio.to_thread(fetch_table_description),  # Load table descriptions
+                        timeout=30.0
+                    )
+                    print(f"✓ Loaded {len(databases_dict)} databases from db_schema")
+                    print(f"  Available databases: {', '.join(databases_dict.keys())}")
+                except asyncio.TimeoutError:
+                    print("⚠️ Database loading timeout - Azure PostgreSQL may be blocking Railway IPs")
+                    print("   Check Azure Portal → PostgreSQL → Networking → Firewall Rules")
+                    print("   Application will start but database queries may fail")
             except Exception as e:
                 print(f"⚠️ Database loading error: {e}")
                 print("   Application may not function correctly")
@@ -199,6 +213,11 @@ app.include_router(airport_decision_router, tags=["Airport A2A Decisions"])
 
 # ✅ MCP Routes - Fully MCP-compliant protocol endpoints
 app.include_router(mcp_api_router)
+
+# ✅ Health check endpoint
+@app.get("/")
+async def root():
+    return {"status": "healthy", "message": "BioInsight AI API is running"}
 
 # ✅ Preflight handler for OPTIONS (catch-all, comes AFTER specific routes)
 @app.options("/{rest_of_path:path}")
