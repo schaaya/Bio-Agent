@@ -16,14 +16,15 @@ from utility.tools import chat_completion_request
 
 load_dotenv()
 
-SEARCH_ENDPOINT = "https://bibotsearch.search.windows.net"
-SEARCH_KEY = "v3pT7Q11rYvUFVEb2Rqaod35kBb5uOL8Ty62Ha4j7cAzSeDo6tqj"
-SEARCH_INDEX_NAME = "sql-queries-index"
+# Load from environment variables
+SEARCH_ENDPOINT = os.getenv("SEARCH_ENDPOINT")
+SEARCH_KEY = os.getenv("SEARCH_KEY")
+SEARCH_INDEX_NAME = os.getenv("SEARCH_INDEX_NAME", "sql-queries-index")
 
-AZURE_OPENAI_KEY = '7d27e20cb4e54bf791b3f112f782ab59'
-AZURE_OPENAI_ENDPOINT = "https://bibot.openai.azure.com/"
+AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 
-BLOB_CONNECTION_STRING = "DefaultEndpointsProtocol=https;AccountName=bibot;AccountKey=zPnWegYSh4PfzH8n5vgFy3Bh+kSjA3sf0BiJBo7HyjOcpASUmMFhH0A3yKqCnK4ltWZgynufEsl3+AStgPKMbg==;EndpointSuffix=core.windows.net"
+BLOB_CONNECTION_STRING = os.getenv("BLOB_CONNECTION_STRING")
 EMBEDDINGS_CONTAINER = "custom-ins-embeddings"
 EMBEDDINGS_BLOB_NAME = "embeddings.json"
 
