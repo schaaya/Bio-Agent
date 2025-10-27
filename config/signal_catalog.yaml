@@ -1,0 +1,236 @@
+# Signal Catalog
+# Defines all available signals (data points) for decision making
+version: "v1"
+
+signals:
+  # Flight Activity Signals
+  arriving_flights_30min:
+    description: "Number of flights arriving in next 30 minutes"
+    nl_prompt: "Count flights arriving in terminal {terminal} at airport {airport_code} in next 30 minutes"
+    sql_template: >
+      SELECT COUNT(*) as value
+      FROM flights
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND status = 'scheduled'
+        AND arrival_time BETWEEN NOW() AND NOW() + INTERVAL '30 minutes'
+    dtype: "int"
+    default: 0
+    freshness_threshold_s: 300  # 5 minutes
+
+  expected_passengers_30min:
+    description: "Expected passenger count from arriving flights"
+    nl_prompt: "Calculate total passengers from flights arriving in terminal {terminal} in next 30 minutes"
+    sql_template: >
+      SELECT SUM(passenger_count) as value
+      FROM flights
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND status = 'scheduled'
+        AND arrival_time BETWEEN NOW() AND NOW() + INTERVAL '30 minutes'
+    dtype: "int"
+    default: 0
+    freshness_threshold_s: 300
+
+  delayed_flights_count:
+    description: "Number of delayed flights"
+    nl_prompt: "Count delayed flights in terminal {terminal}"
+    sql_template: >
+      SELECT COUNT(*) as value
+      FROM flights
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND status = 'delayed'
+        AND DATE(arrival_time) = CURRENT_DATE
+    dtype: "int"
+    default: 0
+    freshness_threshold_s: 180
+
+  # Occupancy Signals
+  current_occupancy_percent:
+    description: "Current passenger density as % of capacity"
+    nl_prompt: "What is current occupancy percentage in terminal {terminal}"
+    sql_template: >
+      SELECT
+        ROUND((current_count::NUMERIC / capacity::NUMERIC) * 100, 1) as value
+      FROM terminal_occupancy
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+      ORDER BY timestamp DESC
+      LIMIT 1
+    dtype: "float"
+    default: 50.0
+    freshness_threshold_s: 120
+
+  predicted_occupancy_1hr:
+    description: "Predicted occupancy in 1 hour"
+    nl_prompt: "Predict occupancy percentage in terminal {terminal} in 1 hour"
+    sql_template: >
+      SELECT predicted_occupancy_percent as value
+      FROM occupancy_predictions
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND prediction_time = NOW() + INTERVAL '1 hour'
+      LIMIT 1
+    dtype: "float"
+    default: 60.0
+    freshness_threshold_s: 600
+
+  # Weather Signals
+  weather_condition:
+    description: "Current weather condition"
+    nl_prompt: "What is current weather at airport {airport_code}"
+    sql_template: >
+      SELECT condition as value
+      FROM weather
+      WHERE airport_code = '{airport_code}'
+      ORDER BY timestamp DESC
+      LIMIT 1
+    dtype: "str"
+    default: "clear"
+    freshness_threshold_s: 1800  # 30 minutes
+
+  is_raining:
+    description: "Boolean indicating rain"
+    nl_prompt: "Is it currently raining at airport {airport_code}"
+    sql_template: >
+      SELECT
+        CASE WHEN condition IN ('rain', 'drizzle', 'thunderstorm')
+        THEN 'true' ELSE 'false' END as value
+      FROM weather
+      WHERE airport_code = '{airport_code}'
+      ORDER BY timestamp DESC
+      LIMIT 1
+    dtype: "bool"
+    default: false
+    freshness_threshold_s: 900
+
+  # Mood/Behavior Signals
+  passenger_mood_score:
+    description: "Passenger mood sentiment score (0-10)"
+    nl_prompt: "What is current passenger mood score in terminal {terminal}"
+    sql_template: >
+      SELECT AVG(sentiment_score) as value
+      FROM passenger_sentiment
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND timestamp > NOW() - INTERVAL '15 minutes'
+    dtype: "float"
+    default: 5.0
+    freshness_threshold_s: 600
+
+  frustration_level:
+    description: "Overall frustration level (low/medium/high)"
+    nl_prompt: "What is frustration level in terminal {terminal}"
+    sql_template: >
+      SELECT
+        CASE
+          WHEN AVG(sentiment_score) < 3 THEN 'high'
+          WHEN AVG(sentiment_score) < 6 THEN 'medium'
+          ELSE 'low'
+        END as value
+      FROM passenger_sentiment
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND timestamp > NOW() - INTERVAL '15 minutes'
+    dtype: "str"
+    default: "medium"
+    freshness_threshold_s: 600
+
+  # Staff Availability
+  available_janitors_count:
+    description: "Number of available janitors"
+    nl_prompt: "How many janitors are available in terminal {terminal}"
+    sql_template: >
+      SELECT COUNT(*) as value
+      FROM staff
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND role = 'janitor'
+        AND status = 'available'
+    dtype: "int"
+    default: 2
+    freshness_threshold_s: 120
+
+  staff_morale_score:
+    description: "Staff morale score (0-10)"
+    nl_prompt: "What is staff morale score in terminal {terminal}"
+    sql_template: >
+      SELECT AVG(morale_score) as value
+      FROM staff_morale
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND timestamp > NOW() - INTERVAL '1 hour'
+    dtype: "float"
+    default: 7.0
+    freshness_threshold_s: 3600
+
+  # Robot Availability
+  available_scrubbers_count:
+    description: "Number of available floor scrubbers"
+    nl_prompt: "How many autonomous scrubbers are available in terminal {terminal}"
+    sql_template: >
+      SELECT COUNT(*) as value
+      FROM robots
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND type = 'floor_scrubber'
+        AND status = 'idle'
+    dtype: "int"
+    default: 1
+    freshness_threshold_s: 60
+
+  robot_battery_avg:
+    description: "Average robot battery percentage"
+    nl_prompt: "What is average battery level of scrubbers in terminal {terminal}"
+    sql_template: >
+      SELECT AVG(battery_percent) as value
+      FROM robots
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND type = 'floor_scrubber'
+    dtype: "float"
+    default: 75.0
+    freshness_threshold_s: 300
+
+  # Zone Conditions
+  wet_floor_zones_count:
+    description: "Number of zones with wet floors"
+    nl_prompt: "How many zones have wet floors in terminal {terminal}"
+    sql_template: >
+      SELECT COUNT(DISTINCT zone_id) as value
+      FROM zone_conditions
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND condition = 'wet_floor'
+        AND timestamp > NOW() - INTERVAL '30 minutes'
+    dtype: "int"
+    default: 0
+    freshness_threshold_s: 180
+
+  high_traffic_zones:
+    description: "List of high-traffic zone IDs"
+    nl_prompt: "Which zones have high foot traffic in terminal {terminal}"
+    sql_template: >
+      SELECT ARRAY_AGG(zone_id) as value
+      FROM zone_traffic
+      WHERE airport_code = '{airport_code}'
+        AND terminal = '{terminal}'
+        AND traffic_level = 'high'
+        AND timestamp > NOW() - INTERVAL '15 minutes'
+    dtype: "json"
+    default: []
+    freshness_threshold_s: 300
+
+  # Cleaning History
+  last_cleaned_minutes:
+    description: "Minutes since last cleaning in zone"
+    nl_prompt: "How long ago was zone {zone_id} last cleaned"
+    sql_template: >
+      SELECT EXTRACT(EPOCH FROM (NOW() - MAX(completed_at)))/60 as value
+      FROM cleaning_log
+      WHERE airport_code = '{airport_code}'
+        AND zone_id = '{zone_id}'
+    dtype: "float"
+    default: 120.0
+    freshness_threshold_s: 300

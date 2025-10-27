@@ -1,0 +1,116 @@
+# Janitorial Operations Playbook
+# Scenario: Deciding between autonomous scrubber vs human janitor
+
+scenario: "janitorial_ops"
+version: "v1.0"
+description: "Autonomous floor scrubber vs. human janitor decision"
+
+# Required signals for this scenario
+required_signals:
+  - arriving_flights_30min
+  - expected_passengers_30min
+  - delayed_flights_count
+  - current_occupancy_percent
+  - predicted_occupancy_1hr
+  - weather_condition
+  - is_raining
+  - passenger_mood_score
+  - frustration_level
+  - available_janitors_count
+  - staff_morale_score
+  - available_scrubbers_count
+  - robot_battery_avg
+  - wet_floor_zones_count
+  - high_traffic_zones
+
+# Policy module to use
+policy_module: "janitorial_policy"
+
+# Guardrails
+guardrails:
+  # Occupancy guardrails
+  - name: "high_occupancy_check"
+    condition: "current_occupancy_percent >= 80"
+    action: "forbid_scrubber_in_chokepoints"
+    severity: "warning"
+    message: "Occupancy ≥80% - scrubber may block passengers"
+
+  - name: "extreme_occupancy_check"
+    condition: "current_occupancy_percent >= 95"
+    action: "require_hitl"
+    severity: "critical"
+    message: "Occupancy ≥95% - requires human approval"
+
+  # Weather + occupancy combination
+  - name: "wet_floor_high_traffic"
+    condition: "is_raining == true AND current_occupancy_percent >= 70"
+    action: "prioritize_entry_points"
+    severity: "warning"
+    message: "Rain + high traffic - prioritize wet entry zones"
+
+  # Staff availability
+  - name: "insufficient_janitors"
+    condition: "available_janitors_count < 1"
+    action: "require_hitl"
+    severity: "critical"
+    message: "No janitors available - requires approval"
+
+  # Robot availability
+  - name: "low_robot_battery"
+    condition: "robot_battery_avg < 20"
+    action: "prefer_human"
+    severity: "warning"
+    message: "Robot battery low - prefer human janitor"
+
+  # Missing signals
+  - name: "stale_signals_check"
+    condition: "any_signal_stale == true"
+    action: "reduce_confidence"
+    severity: "warning"
+    message: "Some signals are stale"
+
+# HITL (Human-in-the-Loop) thresholds
+hitl_config:
+  score_threshold: 0.7  # Require HITL if confidence < 0.7
+  auto_approve_actions:  # Actions that can auto-execute above threshold
+    - "DEPLOY_ROBOT_SCRUBBER"
+    - "DISPATCH_JANITOR"
+  require_approval_actions:  # Always require approval
+    - "ALERT_EMERGENCY"
+    - "EVACUATE_ZONE"
+
+# Zone definitions
+zones:
+  low_traffic:
+    - "concourse_d_west"
+    - "concourse_e_east"
+    - "baggage_claim_overflow"
+  medium_traffic:
+    - "concourse_a"
+    - "concourse_b"
+    - "baggage_claim_main"
+  high_traffic:
+    - "security_checkpoint"
+    - "main_terminal_entry"
+    - "food_court"
+    - "gate_waiting_areas"
+  entry_points:
+    - "main_entrance"
+    - "parking_entrance"
+    - "arrivals_entrance"
+
+# Default parameters
+defaults:
+  scrubber_speed_sqm_per_min: 50
+  janitor_speed_sqm_per_min: 20
+  min_scrubber_battery: 30
+  max_crowd_density_for_robot: 75  # % occupancy
+
+# Output template
+output_schema:
+  primary_action: "str"  # "deploy_robot", "dispatch_human", "hybrid"
+  robot_zones: "list"
+  human_zones: "list"
+  rationale: "str"
+  confidence_score: "float"
+  requires_hitl: "bool"

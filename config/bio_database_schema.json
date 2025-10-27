@@ -1,0 +1,495 @@
+{
+  "bio_gene_expression": {
+    "db_name": "bio_gene_expression",
+    "db_description": "Biomedical gene expression database containing RNA-seq TPM (Transcripts Per Million) values from two complementary datasets: Zhang et al. 2016 (human patient lung tissue samples with tumor/normal pairs) and VanDerSteen FL3C (lung cancer cell lines with mutation profiles). This database enables comparative analysis of gene expression across tissue types, patient demographics, and genetic backgrounds.",
+    "db_dialect": "SQLite",
+    "biological_context": {
+      "measurement_unit": "TPM (Transcripts Per Million)",
+      "interpretation_guidelines": {
+        "TPM_thresholds": {
+          "not_detected": "TPM < 1",
+          "detected": "TPM >= 1",
+          "expressed": "TPM >= 10",
+          "highly_expressed": "TPM >= 100"
+        },
+        "fold_change_significance": {
+          "minimal": "|log2FC| < 0.5 (< 1.4-fold change)",
+          "moderate": "0.5 <= |log2FC| < 1 (1.4 to 2-fold change)",
+          "significant": "|log2FC| >= 1 (>= 2-fold change)",
+          "highly_significant": "|log2FC| >= 2 (>= 4-fold change)"
+        },
+        "statistical_significance": {
+          "p_value": "< 0.05 typically considered statistically significant",
+          "adjusted_p_value": "< 0.05 after FDR correction (preferred for multiple testing)"
+        }
+      },
+      "datasets": {
+        "zhang_2016": {
+          "description": "Human patient lung tissue samples from Zhang et al. 2016 study",
+          "sample_types": ["Tumor tissue", "Adjacent normal tissue"],
+          "paired_samples": "Many patients have matched tumor-normal pairs",
+          "clinical_data": "Includes patient age, gender, smoking status"
+        },
+        "vandersteen_fl3c": {
+          "description": "Lung cancer cell line panel from VanDerSteen FL3C collection",
+          "sample_types": ["Cell lines"],
+          "mutation_data": "Includes EGFR, TP53, KRAS mutation status",
+          "proliferation_data": "Includes growth rate measurements"
+        }
+      }
+    },
+    "db_column_description": [
+      {
+        "Table_Name": "genes",
+        "Table_Description": "Master reference table containing all genes measured across both datasets. Each row represents a unique gene with its official symbol, identifier, and functional annotation. Genes are identified by standardized symbols (e.g., TP53, EGFR, KRAS) familiar to biologists.",
+        "Columns": [
+          {
+            "ColumnName": "gene_id",
+            "ColumnKey": "PRIMARY",
+            "DataType": "TEXT",
+            "Column_Description": "Unique gene identifier. May be Ensembl ID (e.g., ENSG00000141510) or gene symbol (e.g., TP53). Serves as primary key and foreign key link to expression tables."
+          },
+          {
+            "ColumnName": "gene_name",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Official gene symbol (e.g., TP53, EGFR, KRAS). This is the standard nomenclature used in scientific literature. Queries filtering or displaying genes should use this human-readable name rather than gene_id."
+          },
+          {
+            "ColumnName": "gene_description",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Full gene name and functional description. Includes information about gene function, protein products, and aliases."
+          },
+          {
+            "ColumnName": "chromosome",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Chromosomal location (e.g., '17', 'X', 'Y', 'MT'). Useful for genomic context and regional analysis."
+          },
+          {
+            "ColumnName": "gene_type",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Gene biotype classification. Common values: 'protein_coding' (codes for protein), 'lncRNA' (long non-coding RNA), 'miRNA' (microRNA), 'pseudogene'. Most queries focus on protein_coding genes."
+          }
+        ],
+        "Foreign_Keys": {
+          "referenced_by": [
+            {"table": "gene_expression", "column": "gene_id"},
+            {"table": "gene_statistics", "column": "gene_id"},
+            {"table": "gene_comparison", "column": "gene_id"}
+          ]
+        }
+      },
+      {
+        "Table_Name": "samples",
+        "Table_Description": "Master sample registry containing all biological samples across both datasets. Each row represents a unique sample (either a patient tissue sample or a cell line replicate). This table serves as a bridge between expression data and sample-specific metadata tables.",
+        "Columns": [
+          {
+            "ColumnName": "sample_id",
+            "ColumnKey": "PRIMARY",
+            "DataType": "TEXT",
+            "Column_Description": "Unique sample identifier. Format varies by dataset: 'NSLC.####.T' or 'NSLC.####.N' for human tissues (T=tumor, N=normal), or cell line names with replicates for cell lines. Each identifier is unique across the entire database."
+          },
+          {
+            "ColumnName": "sample_type",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Broad sample category. Values: 'human_tissue' (patient-derived tissue from Zhang 2016) or 'cell_line' (cultured cells from VanDerSteen FL3C). This field determines which metadata table contains additional sample information.",
+            "Values": ["human_tissue", "cell_line"]
+          },
+          {
+            "ColumnName": "sample_group",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "High-level sample grouping for quick classification. Values: 'Tumor' (malignant tissue), 'Normal' (adjacent normal tissue), or 'Cell line' (in vitro cell culture). Provides a simplified grouping without requiring joins to metadata tables.",
+            "Values": ["Tumor", "Normal", "Cell line"]
+          },
+          {
+            "ColumnName": "dataset_source",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Source dataset identifier. Values: 'zhang_2016' (human patient samples) or 'vandersteen_fl3c' (cell line panel). Useful for dataset-specific analysis or filtering.",
+            "Values": ["zhang_2016", "vandersteen_fl3c"]
+          }
+        ],
+        "Foreign_Keys": {
+          "referenced_by": [
+            {"table": "gene_expression", "column": "sample_id"},
+            {"table": "human_tissue_metadata", "column": "sample_id"},
+            {"table": "cell_line_metadata", "column": "sample_id"}
+          ]
+        },
+        "Relationships": {
+          "human_tissue_metadata": "One-to-one relationship when sample_type = 'human_tissue'. Contains patient demographics and tissue classification.",
+          "cell_line_metadata": "One-to-one relationship when sample_type = 'cell_line'. Contains mutation profiles and proliferation data."
+        }
+      },
+      {
+        "Table_Name": "human_tissue_metadata",
+        "Table_Description": "Extended clinical and demographic metadata for human patient tissue samples from the Zhang et al. 2016 dataset. Each row corresponds to one sample_id from the samples table where sample_type = 'human_tissue'. Contains critical information for tumor vs normal comparisons and patient stratification.",
+        "Columns": [
+          {
+            "ColumnName": "sample_id",
+            "ColumnKey": "PRIMARY, FOREIGN",
+            "DataType": "TEXT",
+            "Column_Description": "Links to samples.sample_id. One-to-one relationship with human tissue samples. Only samples with sample_type='human_tissue' have entries in this table."
+          },
+          {
+            "ColumnName": "subject_id",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Patient identifier (e.g., 'NSLC.0093'). Multiple samples (tumor + normal) can share the same subject_id when they are paired samples from the same patient. Useful for matched tumor-normal analysis."
+          },
+          {
+            "ColumnName": "tissue_type",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Tissue classification indicating malignancy status. Values: 'Tumor' (malignant lung tissue) or 'Normal' (adjacent histologically normal tissue from the same patient). This is the key field for tumor vs normal differential expression analysis.",
+            "Values": ["Tumor", "Normal"],
+            "Biological_Significance": "Adjacent normal tissue may have field cancerization effects and is not identical to healthy tissue from non-cancer patients."
+          },
+          {
+            "ColumnName": "tissue_source",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Anatomical origin or description of the tissue sample. Provides additional context about sample procurement."
+          },
+          {
+            "ColumnName": "patient_age",
+            "ColumnKey": "",
+            "DataType": "INTEGER",
+            "Column_Description": "Patient age in years at the time of sample collection. Useful for age-stratified analysis of gene expression patterns.",
+            "Typical_Range": "40-85 years (typical lung cancer patient demographics)"
+          },
+          {
+            "ColumnName": "patient_gender",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Patient biological sex. Values: 'Male', 'Female', or 'Unknown'. Important for sex-specific gene expression analysis.",
+            "Values": ["Male", "Female", "Unknown"]
+          },
+          {
+            "ColumnName": "smoking_status",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Patient smoking history classification. Values: 'Never' (never-smoker), 'Former' (ex-smoker), 'Current' (active smoker), or 'Unknown'. Smoking is a major risk factor for lung cancer and can influence expression patterns.",
+            "Values": ["Never", "Former", "Current", "Unknown"]
+          }
+        ],
+        "Foreign_Keys": {
+          "references": [
+            {"table": "samples", "column": "sample_id"}
+          ]
+        }
+      },
+      {
+        "Table_Name": "cell_line_metadata",
+        "Table_Description": "Extended molecular and phenotypic metadata for lung cancer cell lines from the VanDerSteen FL3C dataset. Each row corresponds to one sample_id from the samples table where sample_type = 'cell_line'. Contains mutation status for key oncogenes and tumor suppressors, plus proliferation phenotypes.",
+        "Columns": [
+          {
+            "ColumnName": "sample_id",
+            "ColumnKey": "PRIMARY, FOREIGN",
+            "DataType": "TEXT",
+            "Column_Description": "Links to samples.sample_id. One-to-one relationship with cell line samples. Only samples with sample_type='cell_line' have entries in this table."
+          },
+          {
+            "ColumnName": "cell_line_name",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Official cell line name (e.g., 'A549', 'H1299', 'Calu-3'). Multiple replicates of the same cell line may exist with different sample_ids. Cell line names are standardized and available in public repositories like ATCC."
+          },
+          {
+            "ColumnName": "histology",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Cancer histological subtype from which the cell line was derived. Common values: 'Lung Adenocarcinoma' (LUAD), 'Squamous Cell Carcinoma' (LUSC), 'Small Cell Lung Cancer' (SCLC). Different subtypes have distinct molecular profiles.",
+            "Values": ["Lung Adenocarcinoma", "Squamous Cell Carcinoma", "Large Cell Carcinoma", "Small Cell Lung Cancer"]
+          },
+          {
+            "ColumnName": "proliferation_rate_72h",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Numeric proliferation rate measured at 72 hours post-seeding. Represents growth velocity; higher values indicate faster-growing cell lines. Units may be fold-change or doubling time depending on assay.",
+            "Typical_Range": "1.5 to 4.0 (fold change over 72h)"
+          },
+          {
+            "ColumnName": "proliferation_category",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Categorical binning of proliferation rate for simplified analysis. Values: 'slow' (low growth rate), 'medium' (moderate growth), 'fast' (high growth rate). Derived from proliferation_rate_72h.",
+            "Values": ["slow", "medium", "fast"]
+          },
+          {
+            "ColumnName": "EGFR_status",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "EGFR (Epidermal Growth Factor Receptor) mutation status. Values: 'WT' (wildtype, no activating mutations) or specific mutation notation (e.g., 'p.L858R', 'p.E746_A750del'). EGFR mutations are oncogenic drivers in ~15% of lung adenocarcinomas and predict response to EGFR inhibitors.",
+            "Values": ["WT", "p.L858R", "p.E746_A750del", "p.T790M", "other mutation notations"],
+            "Biological_Significance": "EGFR-mutant cell lines are typically sensitive to gefitinib, erlotinib, and osimertinib."
+          },
+          {
+            "ColumnName": "TP53_status",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "TP53 (tumor protein p53) mutation status. Values: 'WT' (wildtype, functional p53) or specific mutation notation (e.g., 'p.R273H', 'p.R175H'). TP53 is the most commonly mutated gene in human cancers (~50% of lung cancers). Mutations typically result in loss of tumor suppressor function.",
+            "Values": ["WT", "p.R273H", "p.R248W", "p.R175H", "other mutation notations"],
+            "Biological_Significance": "TP53 mutations are associated with genomic instability, altered cell cycle control, and resistance to apoptosis."
+          },
+          {
+            "ColumnName": "KRAS_status",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "KRAS (Kirsten RAS proto-oncogene) mutation status. Values: 'WT' (wildtype) or specific mutation notation (e.g., 'p.G12C', 'p.G12D', 'p.G12V'). KRAS mutations are oncogenic drivers in ~30% of lung adenocarcinomas. Different codon 12/13 mutations may have distinct properties.",
+            "Values": ["WT", "p.G12C", "p.G12D", "p.G12V", "p.G12S", "p.G12A", "p.G13D"],
+            "Biological_Significance": "KRAS mutations activate RAS/MAPK signaling. KRAS G12C-specific inhibitors (sotorasib, adagrasib) are now FDA-approved."
+          }
+        ],
+        "Foreign_Keys": {
+          "references": [
+            {"table": "samples", "column": "sample_id"}
+          ]
+        }
+      },
+      {
+        "Table_Name": "gene_expression",
+        "Table_Description": "Main fact table storing raw gene expression measurements (TPM values) for every gene in every sample. This is the largest table in the database, containing millions of rows (genes × samples). Each row represents the expression level of one gene in one sample. **USE ONLY when you need individual sample values or specific sample IDs. DO NOT USE for group comparisons or summary statistics - use gene_statistics instead.**",
+        "Performance_Note": "**CRITICAL: For ANY query asking to 'show', 'compare', or 'analyze' expression between groups (Tumor vs Normal, etc.), use gene_statistics table, NOT gene_expression. The gene_statistics table is 100x faster and provides precomputed means, medians, and SD.**",
+        "When_NOT_to_Use": "Do NOT use gene_expression for: 'Show TP53 expression in tumor vs normal', 'Compare EGFR between groups', 'Differential expression analysis'. These ALL require gene_statistics.",
+        "Columns": [
+          {
+            "ColumnName": "expression_id",
+            "ColumnKey": "PRIMARY",
+            "DataType": "INTEGER",
+            "Column_Description": "Auto-incrementing unique identifier for each expression measurement. Primarily used for database indexing; rarely needed in query results."
+          },
+          {
+            "ColumnName": "gene_id",
+            "ColumnKey": "FOREIGN",
+            "DataType": "TEXT",
+            "Column_Description": "Foreign key linking to genes.gene_id. Identifies which gene this expression value corresponds to. Required for every row."
+          },
+          {
+            "ColumnName": "sample_id",
+            "ColumnKey": "FOREIGN",
+            "DataType": "TEXT",
+            "Column_Description": "Foreign key linking to samples.sample_id. Identifies which sample this expression value was measured in. Required for every row."
+          },
+          {
+            "ColumnName": "tpm_value",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Normalized gene expression level in Transcripts Per Million (TPM). TPM is a relative abundance measure that accounts for gene length and sequencing depth, allowing comparison across genes and samples. Higher values indicate higher expression.",
+            "Typical_Range": "0 to ~100,000 (most genes fall between 0 and 1,000)",
+            "Interpretation": {
+              "0 to 1": "Not detected or very low expression",
+              "1 to 10": "Detected but low expression",
+              "10 to 100": "Moderate expression",
+              "100+": "High expression",
+              "1000+": "Very high expression (housekeeping genes, highly abundant proteins)"
+            }
+          },
+          {
+            "ColumnName": "dataset_source",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Source dataset for this measurement. Values: 'zhang_2016' (human tissues) or 'vandersteen_fl3c' (cell lines). Useful for filtering to a specific study.",
+            "Values": ["zhang_2016", "vandersteen_fl3c"]
+          }
+        ],
+        "Foreign_Keys": {
+          "references": [
+            {"table": "genes", "column": "gene_id"},
+            {"table": "samples", "column": "sample_id"}
+          ]
+        }
+      },
+      {
+        "Table_Name": "gene_statistics",
+        "Table_Description": "**PRIMARY TABLE for group comparisons and differential expression analysis.** Precomputed aggregate statistics for gene expression grouped by sample_group (Tumor, Normal, Cell line). Each row contains mean, median, SD, min, max, and n_samples for one gene in one group. **ALWAYS USE THIS TABLE for queries like: 'Show [gene] expression in tumor vs normal', 'Compare [gene] between groups', '[gene] levels in cancer vs healthy', 'Differential expression analysis'.**",
+        "Use_Case": "**DEFAULT TABLE for ANY query comparing expression between groups or requesting summary statistics (mean, median, averages).** Returns results 100x faster than computing aggregations from gene_expression.",
+        "Critical_Pattern": "If the query asks to 'show', 'compare', 'analyze', or 'display' gene expression between Tumor/Normal or any groups, USE gene_statistics, NOT gene_expression.",
+        "Columns": [
+          {
+            "ColumnName": "stat_id",
+            "ColumnKey": "PRIMARY",
+            "DataType": "INTEGER",
+            "Column_Description": "Auto-incrementing unique identifier for each statistics record."
+          },
+          {
+            "ColumnName": "gene_id",
+            "ColumnKey": "FOREIGN",
+            "DataType": "TEXT",
+            "Column_Description": "Foreign key linking to genes.gene_id."
+          },
+          {
+            "ColumnName": "dataset_source",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Source dataset for these statistics. Values: 'zhang_2016' or 'vandersteen_fl3c'.",
+            "Values": ["zhang_2016", "vandersteen_fl3c"]
+          },
+          {
+            "ColumnName": "sample_group",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "The group for which statistics were computed. Values: 'Tumor', 'Normal', 'Cell line', or specific histology subtypes. This field identifies which subset of samples contributed to these statistics.",
+            "Values": ["Tumor", "Normal", "Cell line", "Lung Adenocarcinoma", "Squamous Cell Carcinoma"]
+          },
+          {
+            "ColumnName": "n_samples",
+            "ColumnKey": "",
+            "DataType": "INTEGER",
+            "Column_Description": "Number of samples that contributed to these statistics. Important for assessing statistical power and reliability. Larger n_samples provides more confidence in mean/median estimates."
+          },
+          {
+            "ColumnName": "mean_tpm",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Arithmetic mean of TPM values across all samples in this group. The most commonly reported measure of central tendency for expression comparisons."
+          },
+          {
+            "ColumnName": "median_tpm",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Median TPM value across samples in this group. Less sensitive to outliers than mean; preferred when expression distribution is skewed."
+          },
+          {
+            "ColumnName": "variance_tpm",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Variance of TPM values within this group. Measure of expression variability. Higher variance indicates more heterogeneous expression."
+          },
+          {
+            "ColumnName": "std_dev_tpm",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Standard deviation of TPM values. Square root of variance; interpretable in the same units as TPM. Indicates typical deviation from the mean."
+          },
+          {
+            "ColumnName": "min_tpm",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Minimum TPM value observed in this group. Useful for understanding expression range."
+          },
+          {
+            "ColumnName": "max_tpm",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Maximum TPM value observed in this group. Useful for understanding expression range."
+          },
+          {
+            "ColumnName": "q25_tpm",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "25th percentile (first quartile) of expression. 25% of samples have expression below this value."
+          },
+          {
+            "ColumnName": "q75_tpm",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "75th percentile (third quartile) of expression. 75% of samples have expression below this value. (q75 - q25) = IQR (interquartile range)."
+          }
+        ],
+        "Foreign_Keys": {
+          "references": [
+            {"table": "genes", "column": "gene_id"}
+          ]
+        }
+      },
+      {
+        "Table_Name": "gene_comparison",
+        "Table_Description": "Precomputed differential expression analysis results comparing gene expression between two groups. Each row represents the fold change and statistical significance for one gene in one comparison type (e.g., Tumor vs Normal). This table enables rapid identification of differentially expressed genes without recomputing fold changes.",
+        "Use_Case": "Preferred for queries about upregulated/downregulated genes, fold change thresholds, or differential expression analysis.",
+        "Columns": [
+          {
+            "ColumnName": "comparison_id",
+            "ColumnKey": "PRIMARY",
+            "DataType": "INTEGER",
+            "Column_Description": "Auto-incrementing unique identifier for each comparison record."
+          },
+          {
+            "ColumnName": "gene_id",
+            "ColumnKey": "FOREIGN",
+            "DataType": "TEXT",
+            "Column_Description": "Foreign key linking to genes.gene_id."
+          },
+          {
+            "ColumnName": "dataset_source",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Source dataset for this comparison.",
+            "Values": ["zhang_2016", "vandersteen_fl3c"]
+          },
+          {
+            "ColumnName": "comparison_type",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Describes which two groups are being compared. Format typically 'Group1_vs_Group2' where Group1 is the numerator and Group2 is the denominator for fold change calculation. Common values: 'Tumor_vs_Normal', 'KRAS_mutant_vs_WT', 'TP53_mutant_vs_WT'.",
+            "Values": ["Tumor_vs_Normal", "KRAS_mutant_vs_WT", "TP53_mutant_vs_WT", "EGFR_mutant_vs_WT"]
+          },
+          {
+            "ColumnName": "group_1",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "First group in the comparison (numerator for fold change). Example: 'Tumor', 'KRAS_mutant'."
+          },
+          {
+            "ColumnName": "group_2",
+            "ColumnKey": "",
+            "DataType": "TEXT",
+            "Column_Description": "Second group in the comparison (denominator for fold change). Example: 'Normal', 'WT'."
+          },
+          {
+            "ColumnName": "fold_change",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Linear fold change = (mean_group_1 / mean_group_2). Values > 1 indicate upregulation in group_1; values < 1 indicate downregulation. Example: 2.0 means 2-fold higher in group_1, 0.5 means 2-fold lower.",
+            "Interpretation": {
+              "> 1": "Upregulated in group_1 (numerator)",
+              "< 1": "Downregulated in group_1 (numerator)",
+              "= 1": "No change",
+              "> 2 or < 0.5": "At least 2-fold change (typical significance threshold)"
+            }
+          },
+          {
+            "ColumnName": "log2_fold_change",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Log2-transformed fold change = log2(mean_group_1 / mean_group_2). Preferred metric in genomics because it is symmetric around zero and linear in magnitude. Positive values = upregulation, negative values = downregulation.",
+            "Interpretation": {
+              "Positive": "Upregulated in group_1",
+              "Negative": "Downregulated in group_1",
+              "0": "No change",
+              "+1": "2-fold upregulation",
+              "-1": "2-fold downregulation",
+              "+2": "4-fold upregulation",
+              "-2": "4-fold downregulation",
+              "|log2FC| >= 1": "Typically considered biologically significant (>= 2-fold change)"
+            }
+          },
+          {
+            "ColumnName": "p_value",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Statistical p-value from differential expression test (e.g., t-test, Wilcoxon test). Indicates probability that observed difference occurred by chance. Values < 0.05 typically considered statistically significant.",
+            "Interpretation": "< 0.05 = statistically significant; < 0.01 = highly significant; < 0.001 = very highly significant"
+          },
+          {
+            "ColumnName": "adj_p_value",
+            "ColumnKey": "",
+            "DataType": "REAL",
+            "Column_Description": "Adjusted p-value after multiple testing correction (typically FDR/Benjamini-Hochberg method). Since thousands of genes are tested simultaneously, correction prevents false discoveries. Preferred over raw p_value for genome-wide analyses.",
+            "Interpretation": "< 0.05 = significant after correction for multiple testing; < 0.01 = highly significant"
+          }
+        ],
+        "Foreign_Keys": {
+          "references": [
+            {"table": "genes", "column": "gene_id"}
+          ]
+        }
+      }
+    ]
+  }
+}

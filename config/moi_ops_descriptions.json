@@ -1,0 +1,145 @@
+{
+  "MOI_OPS": {
+    "flights": {
+      "table_description": "Flight arrival and departure information for all terminals at the airport. Tracks real-time flight status, passenger counts, and airline operations.",
+      "columns": {
+        "id": "Primary key, auto-incrementing flight record identifier",
+        "flight_number": "Unique flight identifier (e.g., UA123, AA456). Format: airline code + number",
+        "airport_code": "3-letter IATA airport code (e.g., SFO, LAX, JFK)",
+        "terminal": "Terminal identifier where flight arrives/departs (e.g., A, B, C, International)",
+        "arrival_time": "Scheduled or actual arrival timestamp (UTC)",
+        "status": "Current flight status: 'scheduled', 'delayed', 'arrived', 'cancelled', 'diverted'",
+        "passenger_count": "Number of passengers on the flight. Used for occupancy predictions",
+        "airline": "Full airline name (e.g., United Airlines, American Airlines)",
+        "origin": "Origin airport 3-letter IATA code where flight departed from",
+        "destination": "Destination airport 3-letter IATA code (should match airport_code for arrivals)",
+        "created_at": "Timestamp when flight record was created in the system"
+      }
+    },
+    "terminal_occupancy": {
+      "table_description": "Real-time passenger occupancy levels in each terminal. Tracks current count vs capacity to calculate occupancy percentage. Critical for janitorial scheduling and crowd management.",
+      "columns": {
+        "id": "Primary key, auto-incrementing occupancy record identifier",
+        "airport_code": "3-letter IATA airport code (e.g., SFO, LAX, JFK)",
+        "terminal": "Terminal identifier (e.g., A, B, C, International)",
+        "current_count": "Current number of passengers in the terminal",
+        "capacity": "Maximum passenger capacity for the terminal",
+        "occupancy_percent": "Calculated as (current_count / capacity) * 100. Generated column, always up-to-date",
+        "timestamp": "When this occupancy measurement was recorded"
+      }
+    },
+    "weather": {
+      "table_description": "Current weather conditions at the airport. Affects janitorial operations (wet floors, increased foot traffic from rain) and flight delays.",
+      "columns": {
+        "id": "Primary key, auto-incrementing weather record identifier",
+        "airport_code": "3-letter IATA airport code",
+        "condition": "Weather condition: 'clear', 'rain', 'drizzle', 'thunderstorm', 'snow', 'fog', 'cloudy'",
+        "temperature": "Temperature in Celsius",
+        "humidity": "Relative humidity percentage (0-100)",
+        "wind_speed": "Wind speed in km/h",
+        "visibility": "Visibility in kilometers",
+        "timestamp": "When this weather reading was recorded"
+      }
+    },
+    "passenger_sentiment": {
+      "table_description": "Passenger mood and satisfaction levels measured through surveys, facial recognition, or feedback kiosks. Used to assess terminal atmosphere and service quality.",
+      "columns": {
+        "id": "Primary key, auto-incrementing sentiment record identifier",
+        "airport_code": "3-letter IATA airport code",
+        "terminal": "Terminal identifier where sentiment was measured",
+        "sentiment_score": "Numerical score from 0-10 (0=very negative, 5=neutral, 10=very positive)",
+        "mood_category": "Categorical mood: 'happy', 'neutral', 'frustrated', 'angry', 'anxious'",
+        "timestamp": "When sentiment was measured"
+      }
+    },
+    "staff": {
+      "table_description": "Airport staff roster including janitors, security, customer service. Tracks current availability and shift schedules for operational decisions.",
+      "columns": {
+        "id": "Primary key, auto-incrementing staff record identifier",
+        "staff_id": "Unique employee identifier (e.g., EMP-001, JAN-042)",
+        "name": "Full name of the staff member",
+        "role": "Job role: 'janitor', 'security', 'customer_service', 'maintenance', 'supervisor'",
+        "airport_code": "3-letter IATA airport code where staff is assigned",
+        "terminal": "Terminal assignment (can be 'ALL' for roaming staff)",
+        "status": "Current availability: 'available', 'busy', 'on_break', 'off_duty'",
+        "shift_start": "Start time of current shift",
+        "shift_end": "End time of current shift"
+      }
+    },
+    "staff_morale": {
+      "table_description": "Staff morale and fatigue levels tracked over time. Low morale or high fatigue affects productivity and may require workflow adjustments.",
+      "columns": {
+        "id": "Primary key, auto-incrementing morale record identifier",
+        "staff_id": "Foreign key to staff table, links to specific employee",
+        "airport_code": "3-letter IATA airport code",
+        "terminal": "Terminal where staff is working",
+        "morale_score": "Morale score from 0-10 (0=very low, 10=very high)",
+        "fatigue_level": "Fatigue level: 'low', 'medium', 'high', 'critical'",
+        "timestamp": "When morale/fatigue was measured"
+      }
+    },
+    "robots": {
+      "table_description": "Autonomous cleaning robots (floor scrubbers, vacuum cleaners) deployed in terminals. Tracks battery levels, operational status, and maintenance schedules.",
+      "columns": {
+        "id": "Primary key, auto-incrementing robot record identifier",
+        "robot_id": "Unique robot identifier (e.g., SCRUB-001, VAC-042)",
+        "type": "Robot type: 'floor_scrubber', 'vacuum_cleaner', 'sanitizer'",
+        "airport_code": "3-letter IATA airport code where robot is deployed",
+        "terminal": "Terminal assignment for the robot",
+        "battery_percent": "Current battery level (0-100)",
+        "status": "Current status: 'idle', 'working', 'charging', 'maintenance', 'error'",
+        "last_maintenance": "Timestamp of last maintenance service",
+        "timestamp": "Last status update timestamp"
+      }
+    },
+    "zone_conditions": {
+      "table_description": "Real-time environmental conditions in specific terminal zones. Reports wet floors, spills, debris, or other conditions requiring cleaning attention.",
+      "columns": {
+        "id": "Primary key, auto-incrementing zone condition record identifier",
+        "zone_id": "Zone identifier (e.g., 'gate_a12', 'concourse_b_west', 'security_checkpoint')",
+        "airport_code": "3-letter IATA airport code",
+        "terminal": "Terminal containing the zone",
+        "condition": "Condition type: 'wet_floor', 'spill', 'debris', 'clean', 'under_cleaning'",
+        "severity": "Severity level: 'low', 'medium', 'high', 'critical'",
+        "timestamp": "When condition was reported or detected"
+      }
+    },
+    "zone_traffic": {
+      "table_description": "Foot traffic levels in specific terminal zones. High traffic areas require more frequent cleaning and may need robots instead of human janitors during peak times.",
+      "columns": {
+        "id": "Primary key, auto-incrementing zone traffic record identifier",
+        "zone_id": "Zone identifier (e.g., 'gate_a12', 'concourse_b_west', 'food_court')",
+        "airport_code": "3-letter IATA airport code",
+        "terminal": "Terminal containing the zone",
+        "traffic_level": "Traffic level: 'low', 'medium', 'high', 'very_high'",
+        "foot_count": "Approximate number of people passing through in last measurement period",
+        "timestamp": "When traffic was measured"
+      }
+    },
+    "cleaning_log": {
+      "table_description": "Historical log of all cleaning activities. Tracks who cleaned what, when, and how long it took. Used to calculate time since last cleaning for scheduling.",
+      "columns": {
+        "id": "Primary key, auto-incrementing cleaning log record identifier",
+        "zone_id": "Zone that was cleaned",
+        "airport_code": "3-letter IATA airport code",
+        "cleaner_id": "ID of staff or robot that performed cleaning (links to staff_id or robot_id)",
+        "cleaner_type": "Type of cleaner: 'human_janitor', 'floor_scrubber', 'vacuum_cleaner'",
+        "started_at": "When cleaning started",
+        "completed_at": "When cleaning was completed. Used to calculate duration",
+        "notes": "Optional notes about cleaning (e.g., 'Spill cleaned', 'Deep clean performed')"
+      }
+    },
+    "occupancy_predictions": {
+      "table_description": "Predicted future occupancy levels for terminals. Generated by ML models based on flight schedules, historical patterns, and events. Used for proactive janitorial scheduling.",
+      "columns": {
+        "id": "Primary key, auto-incrementing prediction record identifier",
+        "airport_code": "3-letter IATA airport code",
+        "terminal": "Terminal for which prediction is made",
+        "prediction_time": "Future timestamp that prediction is for (e.g., 1 hour from now)",
+        "predicted_occupancy_percent": "Predicted occupancy percentage (0-100)",
+        "confidence": "Prediction confidence score (0-1), where 1 is highest confidence",
+        "created_at": "When prediction was generated"
+      }
+    }
+  }
+}

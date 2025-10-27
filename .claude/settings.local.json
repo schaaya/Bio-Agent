@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(head:*)",
+      "Bash(cut:*)",
+      "Bash(python verify_kras_coverage.py)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

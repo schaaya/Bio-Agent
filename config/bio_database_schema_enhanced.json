@@ -1,0 +1,599 @@
+{
+  "bio_gene_expression": {
+    "db_name": "bio_gene_expression",
+    "db_description": "Biomedical gene expression database containing TPM (Transcripts Per Million) values from Zhang et al. (human patient samples) and VanDerSteen FL3C (lung cancer cell lines) datasets. Supports differential expression analysis between tumor/normal tissues and mutation-stratified cell lines.",
+    "db_dialect": "SQLite",
+    "db_column_description": [
+      {
+        "Table_Name": "genes",
+        "Table_Description": "Master table of all genes across both datasets. Contains unique gene identifiers, symbols, and descriptions. Use this table to find gene IDs or names. REQUIRED for ANY query involving gene names or gene-related filtering.",
+        "Query_Patterns": [
+          "REQUIRED when user mentions any gene name (e.g., TP53, EGFR, KRAS)",
+          "REQUIRED for gene lookups, gene info queries, or any gene-based filtering",
+          "Always JOIN with gene_expression via gene_id to get expression data"
+        ],
+        "Common_Joins": [
+          {
+            "join_with": "gene_expression",
+            "on": "genes.gene_id = gene_expression.gene_id",
+            "join_type": "INNER JOIN",
+            "purpose": "Link gene information to expression values",
+            "example": "FROM genes g INNER JOIN gene_expression ge ON g.gene_id = ge.gene_id WHERE g.gene_name = 'TP53'"
+          },
+          {
+            "join_with": "gene_statistics",
+            "on": "genes.gene_id = gene_statistics.gene_id",
+            "join_type": "INNER JOIN",
+            "purpose": "Get precomputed statistics for genes",
+            "example": "FROM genes g INNER JOIN gene_statistics gs ON g.gene_id = gs.gene_id"
+          },
+          {
+            "join_with": "gene_comparison",
+            "on": "genes.gene_id = gene_comparison.gene_id",
+            "join_type": "INNER JOIN",
+            "purpose": "Get differential expression results",
+            "example": "FROM genes g INNER JOIN gene_comparison gc ON g.gene_id = gc.gene_id"
+          }
+        ],
+        "Critical_Columns": {
+          "gene_name": {
+            "always_select": true,
+            "required_for": ["All gene queries", "Result readability", "Gene identification"],
+            "note": "Users think in gene symbols (TP53) not IDs (ENSG00000141510). Always include gene_name in SELECT."
+          },
+          "gene_id": {
+            "always_select": false,
+            "required_for": ["Joining with other tables"],
+            "note": "Primary key for joins but usually not needed in final output."
+          }
+        },
+        "Columns": [
+          {
+            "ColumnName": "gene_id",
+            "ColumnKey": "PRIMARY",
+            "Column_Description": "Primary key. Unique gene identifier (e.g., ENSG00000141510 or TP53). Use for joining with expression data."
+          },
+          {
+            "ColumnName": "gene_name",
+            "ColumnKey": "",
+            "Column_Description": "Gene symbol (e.g., TP53, EGFR, KRAS). This is the common name users will query. Case-insensitive search recommended. ALWAYS include this in SELECT clause for user readability."
+          },
+          {
+            "ColumnName": "gene_description",
+            "ColumnKey": "",
+            "Column_Description": "Full gene description including function and aliases."
+          },
+          {
+            "ColumnName": "chromosome",
+            "ColumnKey": "",
+            "Column_Description": "Chromosome location (e.g., 17, X, Y)."
+          },
+          {
+            "ColumnName": "gene_type",
+            "ColumnKey": "",
+            "Column_Description": "Type of gene: protein_coding, lncRNA, miRNA, etc."
+          }
+        ]
+      },
+      {
+        "Table_Name": "samples",
+        "Table_Description": "Master table for all samples including human tissues and cell lines. Links to metadata tables based on sample_type. CRITICAL BRIDGE TABLE: Always use this when joining gene_expression to tissue/cell line metadata.",
+        "Query_Patterns": [
+          "REQUIRED as bridge when joining gene_expression to human_tissue_metadata or cell_line_metadata",
+          "REQUIRED when user asks about sample types, groups, or dataset sources",
+          "Use sample_group column for quick tumor/normal/cell line grouping without full metadata joins"
+        ],
+        "Common_Joins": [
+          {
+            "join_with": "gene_expression",
+            "on": "samples.sample_id = gene_expression.sample_id",
+            "join_type": "INNER JOIN",
+            "purpose": "Link sample info to expression data",
+            "example": "FROM gene_expression ge INNER JOIN samples s ON ge.sample_id = s.sample_id"
+          },
+          {
+            "join_with": "human_tissue_metadata",
+            "on": "samples.sample_id = human_tissue_metadata.sample_id",
+            "join_type": "LEFT JOIN",
+            "purpose": "Get detailed tissue/patient metadata (use LEFT JOIN because not all samples are human tissues)",
+            "example": "FROM samples s LEFT JOIN human_tissue_metadata htm ON s.sample_id = htm.sample_id WHERE s.sample_type = 'human_tissue'"
+          },
+          {
+            "join_with": "cell_line_metadata",
+            "on": "samples.sample_id = cell_line_metadata.sample_id",
+            "join_type": "LEFT JOIN",
+            "purpose": "Get cell line mutation and proliferation data",
+            "example": "FROM samples s LEFT JOIN cell_line_metadata clm ON s.sample_id = clm.sample_id WHERE s.sample_type = 'cell_line'"
+          }
+        ],
+        "Critical_Columns": {
+          "sample_id": {
+            "always_select": false,
+            "required_for": ["Joining tables"],
+            "note": "Primary key for joins."
+          },
+          "sample_type": {
+            "always_select": false,
+            "required_for": ["Determining which metadata table to join"],
+            "note": "Use to filter: 'human_tissue' or 'cell_line'."
+          },
+          "sample_group": {
+            "always_select": true,
+            "required_for": ["Quick tumor/normal/cell line grouping", "Comparisons without full metadata join"],
+            "note": "Quick access to group classification. Use when you don't need detailed metadata."
+          }
+        },
+        "Columns": [
+          {
+            "ColumnName": "sample_id",
+            "ColumnKey": "PRIMARY",
+            "Column_Description": "Unique sample identifier. Format: NSLC.####.T/N for human tissues, cell_line_rep# for cell lines."
+          },
+          {
+            "ColumnName": "sample_type",
+            "ColumnKey": "",
+            "Column_Description": "Type of sample: 'human_tissue' or 'cell_line'. Use to determine which metadata table to join."
+          },
+          {
+            "ColumnName": "sample_group",
+            "ColumnKey": "",
+            "Column_Description": "Sample category: 'Tumor', 'Normal' (for human tissues), or 'Cell line'. Key for grouping in comparisons. Use this for quick tumor vs normal grouping."
+          },
+          {
+            "ColumnName": "dataset_source",
+            "ColumnKey": "",
+            "Column_Description": "Source dataset: 'zhang_2016' for human patient data, 'vandersteen_fl3c' for cell line data."
+          }
+        ]
+      },
+      {
+        "Table_Name": "human_tissue_metadata",
+        "Table_Description": "Extended metadata for human patient tissue samples from Zhang et al. Contains patient demographics and tissue characteristics. CRITICAL: This table is REQUIRED for ANY tumor vs normal comparisons, patient demographic analysis, or tissue type grouping.",
+        "Query_Patterns": [
+          "REQUIRED when user asks about 'tumor vs normal', 'tumor versus normal', 'cancer vs healthy', or differential expression in tissues",
+          "REQUIRED when user asks about patient demographics (age, gender, smoking status)",
+          "REQUIRED when user wants to group by tissue_type or compare tissue groups",
+          "ALWAYS JOIN via samples table (gene_expression -> samples -> human_tissue_metadata)"
+        ],
+        "Common_Joins": [
+          {
+            "join_with": "samples",
+            "on": "human_tissue_metadata.sample_id = samples.sample_id",
+            "join_type": "INNER JOIN",
+            "purpose": "Link tissue metadata to sample records",
+            "example": "FROM human_tissue_metadata htm INNER JOIN samples s ON htm.sample_id = s.sample_id"
+          },
+          {
+            "join_with": "gene_expression",
+            "via": "samples",
+            "join_chain": "gene_expression -> samples -> human_tissue_metadata",
+            "join_type": "LEFT JOIN (for human_tissue_metadata)",
+            "purpose": "Get expression values WITH tissue type classification (tumor/normal)",
+            "example": "FROM gene_expression ge INNER JOIN samples s ON ge.sample_id = s.sample_id LEFT JOIN human_tissue_metadata htm ON s.sample_id = htm.sample_id WHERE s.sample_type = 'human_tissue'"
+          }
+        ],
+        "Critical_Columns": {
+          "tissue_type": {
+            "always_select": true,
+            "required_for": ["Tumor vs normal comparisons", "Tissue classification", "GROUP BY in differential expression"],
+            "note": "MUST SELECT this column when user asks for tumor vs normal comparisons. Use for GROUP BY to separate tumor and normal results."
+          },
+          "subject_id": {
+            "always_select": false,
+            "required_for": ["Paired sample analysis", "Patient-level grouping"],
+            "note": "Use when analyzing matched tumor-normal pairs from same patient."
+          }
+        },
+        "Columns": [
+          {
+            "ColumnName": "sample_id",
+            "ColumnKey": "PRIMARY, FOREIGN",
+            "Column_Description": "Links to samples.sample_id. One-to-one relationship with human_tissue samples."
+          },
+          {
+            "ColumnName": "subject_id",
+            "ColumnKey": "",
+            "Column_Description": "Patient identifier (e.g., NSLC.0093). Multiple samples can come from same patient. Use for paired analysis."
+          },
+          {
+            "ColumnName": "tissue_type",
+            "ColumnKey": "",
+            "Column_Description": "Type of tissue: 'Tumor' or 'Normal'. CRITICAL: Use for tumor vs normal comparisons. Always include in SELECT and GROUP BY for comparative analysis."
+          },
+          {
+            "ColumnName": "tissue_source",
+            "ColumnKey": "",
+            "Column_Description": "Anatomical source or description of the tissue sample."
+          },
+          {
+            "ColumnName": "patient_age",
+            "ColumnKey": "",
+            "Column_Description": "Age of patient at sample collection."
+          },
+          {
+            "ColumnName": "patient_gender",
+            "ColumnKey": "",
+            "Column_Description": "Patient gender: Male, Female, or Unknown."
+          },
+          {
+            "ColumnName": "smoking_status",
+            "ColumnKey": "",
+            "Column_Description": "Smoking history: Never, Former, Current, or Unknown."
+          }
+        ]
+      },
+      {
+        "Table_Name": "cell_line_metadata",
+        "Table_Description": "Extended metadata for lung cancer cell lines from VanDerSteen FL3C dataset. Includes mutation profiles (EGFR, TP53, KRAS) and proliferation rates. CRITICAL: Required for mutation-stratified analysis or cell line characterization.",
+        "Query_Patterns": [
+          "REQUIRED when user asks about cell lines, cell line characteristics, or in vitro models",
+          "REQUIRED when user asks about mutations (EGFR, TP53, KRAS), mutation status, or wildtype vs mutant comparisons",
+          "REQUIRED when user asks about proliferation, growth rate, or cancer subtype (histology)",
+          "ALWAYS JOIN via samples table (gene_expression -> samples -> cell_line_metadata)"
+        ],
+        "Common_Joins": [
+          {
+            "join_with": "samples",
+            "on": "cell_line_metadata.sample_id = samples.sample_id",
+            "join_type": "INNER JOIN",
+            "purpose": "Link cell line metadata to sample records",
+            "example": "FROM cell_line_metadata clm INNER JOIN samples s ON clm.sample_id = s.sample_id"
+          },
+          {
+            "join_with": "gene_expression",
+            "via": "samples",
+            "join_chain": "gene_expression -> samples -> cell_line_metadata",
+            "join_type": "LEFT JOIN (for cell_line_metadata)",
+            "purpose": "Get expression values WITH mutation status or cell line characteristics",
+            "example": "FROM gene_expression ge INNER JOIN samples s ON ge.sample_id = s.sample_id LEFT JOIN cell_line_metadata clm ON s.sample_id = clm.sample_id WHERE s.sample_type = 'cell_line'"
+          }
+        ],
+        "Critical_Columns": {
+          "TP53_status": {
+            "always_select": true,
+            "required_for": ["TP53 mutation analysis", "Mutant vs wildtype comparisons"],
+            "note": "MUST SELECT when user asks about TP53 mutations or p53 status."
+          },
+          "EGFR_status": {
+            "always_select": true,
+            "required_for": ["EGFR mutation analysis", "EGFR inhibitor response"],
+            "note": "MUST SELECT when user asks about EGFR mutations."
+          },
+          "KRAS_status": {
+            "always_select": true,
+            "required_for": ["KRAS mutation analysis", "RAS pathway analysis"],
+            "note": "MUST SELECT when user asks about KRAS mutations."
+          },
+          "histology": {
+            "always_select": false,
+            "required_for": ["Cancer subtype analysis", "Adenocarcinoma vs squamous"],
+            "note": "Use for grouping by cancer subtype."
+          }
+        },
+        "Columns": [
+          {
+            "ColumnName": "sample_id",
+            "ColumnKey": "PRIMARY, FOREIGN",
+            "Column_Description": "Links to samples.sample_id. One-to-one relationship with cell_line samples."
+          },
+          {
+            "ColumnName": "cell_line_name",
+            "ColumnKey": "",
+            "Column_Description": "Name of cell line (e.g., A427, A549, Calu-3). Multiple replicates may exist per cell line."
+          },
+          {
+            "ColumnName": "histology",
+            "ColumnKey": "",
+            "Column_Description": "Cancer histology subtype (e.g., 'Lung Adenocarcinoma', 'Squamous Cell Carcinoma'). Use for subtype-specific analysis."
+          },
+          {
+            "ColumnName": "proliferation_rate_72h",
+            "ColumnKey": "",
+            "Column_Description": "Numeric proliferation rate measured at 72 hours. Higher values = faster growth. Use for correlating expression with growth."
+          },
+          {
+            "ColumnName": "proliferation_category",
+            "ColumnKey": "",
+            "Column_Description": "Categorical proliferation: 'slow', 'medium', or 'fast'. Use for grouping by growth rate."
+          },
+          {
+            "ColumnName": "EGFR_status",
+            "ColumnKey": "",
+            "Column_Description": "EGFR mutation status: 'WT' (wildtype) or mutation notation (e.g., 'p.L858R'). CRITICAL: Always include in SELECT when user asks about EGFR mutations. Use for stratifying by EGFR status."
+          },
+          {
+            "ColumnName": "TP53_status",
+            "ColumnKey": "",
+            "Column_Description": "TP53 mutation status: 'WT' (wildtype) or mutation notation (e.g., 'p.M237I'). CRITICAL: Always include in SELECT when user asks about TP53 or p53 mutations. Use for stratifying by p53 status."
+          },
+          {
+            "ColumnName": "KRAS_status",
+            "ColumnKey": "",
+            "Column_Description": "KRAS mutation status: 'WT' (wildtype) or mutation notation (e.g., 'p.G12D', 'p.G12S'). CRITICAL: Always include in SELECT when user asks about KRAS mutations. Use for stratifying by KRAS status."
+          }
+        ]
+      },
+      {
+        "Table_Name": "gene_expression",
+        "Table_Description": "Main fact table storing gene expression values (TPM) for all samples. Use this for raw expression queries. ALWAYS join with genes (to get gene names) and samples (to get sample metadata) for complete information. Never query this table alone.",
+        "Query_Patterns": [
+          "REQUIRED for ANY expression-related query (levels, values, TPM)",
+          "ALWAYS join with genes table to filter by gene_name and include gene_name in results",
+          "ALWAYS join with samples table to get sample metadata",
+          "For tumor vs normal: gene_expression -> samples -> human_tissue_metadata",
+          "For mutation analysis: gene_expression -> samples -> cell_line_metadata"
+        ],
+        "Common_Joins": [
+          {
+            "join_with": "genes",
+            "on": "gene_expression.gene_id = genes.gene_id",
+            "join_type": "INNER JOIN",
+            "purpose": "Get gene names and filter by gene symbols",
+            "example": "FROM gene_expression ge INNER JOIN genes g ON ge.gene_id = g.gene_id WHERE g.gene_name = 'TP53'",
+            "note": "ALWAYS include this join. Users need gene names, not just IDs."
+          },
+          {
+            "join_with": "samples",
+            "on": "gene_expression.sample_id = samples.sample_id",
+            "join_type": "INNER JOIN",
+            "purpose": "Get sample type and group information",
+            "example": "FROM gene_expression ge INNER JOIN samples s ON ge.sample_id = s.sample_id"
+          },
+          {
+            "join_with": "human_tissue_metadata",
+            "via": "samples",
+            "join_chain": "gene_expression -> samples -> human_tissue_metadata",
+            "join_type": "LEFT JOIN on human_tissue_metadata",
+            "purpose": "Get tissue type for tumor vs normal analysis",
+            "example": "FROM gene_expression ge INNER JOIN samples s ON ge.sample_id = s.sample_id LEFT JOIN human_tissue_metadata htm ON s.sample_id = htm.sample_id",
+            "when_required": "When user asks for tumor vs normal, tissue classification, or patient data"
+          },
+          {
+            "join_with": "cell_line_metadata",
+            "via": "samples",
+            "join_chain": "gene_expression -> samples -> cell_line_metadata",
+            "join_type": "LEFT JOIN on cell_line_metadata",
+            "purpose": "Get mutation status and cell line characteristics",
+            "example": "FROM gene_expression ge INNER JOIN samples s ON ge.sample_id = s.sample_id LEFT JOIN cell_line_metadata clm ON s.sample_id = clm.sample_id",
+            "when_required": "When user asks about mutations, cell lines, or in vitro data"
+          }
+        ],
+        "Critical_Columns": {
+          "tpm_value": {
+            "always_select": true,
+            "required_for": ["All expression queries"],
+            "note": "The main expression value. Use AVG(), MAX(), MIN() for aggregations."
+          },
+          "sample_id": {
+            "always_select": false,
+            "required_for": ["Joining with samples table", "Individual sample results"],
+            "note": "Include in SELECT if showing per-sample results."
+          }
+        },
+        "Columns": [
+          {
+            "ColumnName": "expression_id",
+            "ColumnKey": "PRIMARY",
+            "Column_Description": "Auto-incrementing unique identifier for each expression record. Usually not needed in results."
+          },
+          {
+            "ColumnName": "gene_id",
+            "ColumnKey": "FOREIGN",
+            "Column_Description": "Links to genes.gene_id. Required for every expression record. Use for joining, not for display (use gene_name instead)."
+          },
+          {
+            "ColumnName": "sample_id",
+            "ColumnKey": "FOREIGN",
+            "Column_Description": "Links to samples.sample_id. Required for every expression record. Use for joining with samples table."
+          },
+          {
+            "ColumnName": "tpm_value",
+            "ColumnKey": "",
+            "Column_Description": "Expression level in TPM (Transcripts Per Million). Higher values = higher expression. Range: 0 to ~100,000. ALWAYS include this in SELECT for expression queries."
+          },
+          {
+            "ColumnName": "dataset_source",
+            "ColumnKey": "",
+            "Column_Description": "Source dataset: 'zhang_2016' or 'vandersteen_fl3c'. Use to filter by study or separate results by dataset."
+          }
+        ]
+      },
+      {
+        "Table_Name": "gene_statistics",
+        "Table_Description": "Precomputed statistical summaries for gene expression grouped by sample groups. Use this for faster aggregate queries instead of computing on gene_expression. PREFERRED for queries asking for mean, median, or summary statistics.",
+        "Query_Patterns": [
+          "PREFERRED when user asks for mean, median, average, or summary statistics",
+          "PREFERRED when user wants precomputed group comparisons (faster than aggregating gene_expression)",
+          "Use this instead of gene_expression when user needs aggregated data by group",
+          "ALWAYS join with genes to get gene_name"
+        ],
+        "Common_Joins": [
+          {
+            "join_with": "genes",
+            "on": "gene_statistics.gene_id = genes.gene_id",
+            "join_type": "INNER JOIN",
+            "purpose": "Get gene names for statistics results",
+            "example": "FROM gene_statistics gs INNER JOIN genes g ON gs.gene_id = g.gene_id WHERE g.gene_name = 'TP53' AND gs.sample_group IN ('Tumor', 'Normal')"
+          }
+        ],
+        "Critical_Columns": {
+          "sample_group": {
+            "always_select": true,
+            "required_for": ["Identifying which group the statistics represent"],
+            "note": "Values: 'Tumor', 'Normal', 'Cell line', or histology subtypes."
+          },
+          "mean_tpm": {
+            "always_select": true,
+            "required_for": ["Average expression comparisons"],
+            "note": "Most common statistic for comparisons."
+          },
+          "median_tpm": {
+            "always_select": false,
+            "required_for": ["Robust central tendency (less affected by outliers)"],
+            "note": "Use when outliers might skew results."
+          },
+          "n_samples": {
+            "always_select": true,
+            "required_for": ["Sample size reporting", "Statistical validity"],
+            "note": "Always report how many samples contributed to statistics."
+          }
+        },
+        "Columns": [
+          {
+            "ColumnName": "stat_id",
+            "ColumnKey": "PRIMARY",
+            "Column_Description": "Unique identifier for each statistics record."
+          },
+          {
+            "ColumnName": "gene_id",
+            "ColumnKey": "FOREIGN",
+            "Column_Description": "Links to genes.gene_id."
+          },
+          {
+            "ColumnName": "dataset_source",
+            "ColumnKey": "",
+            "Column_Description": "Source dataset: 'zhang_2016' or 'vandersteen_fl3c'."
+          },
+          {
+            "ColumnName": "sample_group",
+            "ColumnKey": "",
+            "Column_Description": "Group for aggregation: 'Tumor', 'Normal', 'Cell line', or histology subtypes. ALWAYS include in SELECT to identify groups."
+          },
+          {
+            "ColumnName": "n_samples",
+            "ColumnKey": "",
+            "Column_Description": "Number of samples in this group. ALWAYS include for transparency."
+          },
+          {
+            "ColumnName": "mean_tpm",
+            "ColumnKey": "",
+            "Column_Description": "Mean expression (TPM) across samples in this group. Primary statistic for comparisons."
+          },
+          {
+            "ColumnName": "median_tpm",
+            "ColumnKey": "",
+            "Column_Description": "Median expression (TPM) across samples in this group. Use for robust central tendency."
+          },
+          {
+            "ColumnName": "variance_tpm",
+            "ColumnKey": "",
+            "Column_Description": "Variance of expression across samples. Use for variability analysis."
+          },
+          {
+            "ColumnName": "std_dev_tpm",
+            "ColumnKey": "",
+            "Column_Description": "Standard deviation of expression across samples. Use for reporting variability."
+          },
+          {
+            "ColumnName": "min_tpm",
+            "ColumnKey": "",
+            "Column_Description": "Minimum expression value in this group."
+          },
+          {
+            "ColumnName": "max_tpm",
+            "ColumnKey": "",
+            "Column_Description": "Maximum expression value in this group."
+          },
+          {
+            "ColumnName": "q25_tpm",
+            "ColumnKey": "",
+            "Column_Description": "25th percentile (first quartile) of expression."
+          },
+          {
+            "ColumnName": "q75_tpm",
+            "ColumnKey": "",
+            "Column_Description": "75th percentile (third quartile) of expression. Use with q25 for IQR."
+          }
+        ]
+      },
+      {
+        "Table_Name": "gene_comparison",
+        "Table_Description": "Differential expression analysis results comparing gene expression between groups (e.g., Tumor vs Normal). Use for finding upregulated or downregulated genes. PREFERRED when user asks for fold change, differential expression, or significantly changed genes.",
+        "Query_Patterns": [
+          "PREFERRED when user asks for 'upregulated', 'downregulated', 'differentially expressed', or 'fold change'",
+          "Use when user wants to compare groups (tumor vs normal, mutant vs wildtype)",
+          "Filter by fold_change or log2_fold_change thresholds for significance",
+          "ALWAYS join with genes to get gene_name"
+        ],
+        "Common_Joins": [
+          {
+            "join_with": "genes",
+            "on": "gene_comparison.gene_id = genes.gene_id",
+            "join_type": "INNER JOIN",
+            "purpose": "Get gene names for comparison results",
+            "example": "FROM gene_comparison gc INNER JOIN genes g ON gc.gene_id = g.gene_id WHERE gc.comparison_type = 'Tumor_vs_Normal' AND ABS(gc.log2_fold_change) > 1"
+          }
+        ],
+        "Critical_Columns": {
+          "comparison_type": {
+            "always_select": true,
+            "required_for": ["Identifying what comparison was performed"],
+            "note": "Values like 'Tumor_vs_Normal', 'KRAS_mutant_vs_WT'."
+          },
+          "log2_fold_change": {
+            "always_select": true,
+            "required_for": ["Differential expression magnitude and direction"],
+            "note": "Positive = upregulated in group_1, negative = downregulated. |log2FC| > 1 is typically significant (2-fold change)."
+          },
+          "fold_change": {
+            "always_select": false,
+            "required_for": ["Linear fold change interpretation"],
+            "note": "Use when user specifically asks for 'X-fold change'. log2_fold_change is more standard."
+          }
+        },
+        "Columns": [
+          {
+            "ColumnName": "comparison_id",
+            "ColumnKey": "PRIMARY",
+            "Column_Description": "Unique identifier for each comparison record."
+          },
+          {
+            "ColumnName": "gene_id",
+            "ColumnKey": "FOREIGN",
+            "Column_Description": "Links to genes.gene_id."
+          },
+          {
+            "ColumnName": "dataset_source",
+            "ColumnKey": "",
+            "Column_Description": "Source dataset for this comparison."
+          },
+          {
+            "ColumnName": "comparison_type",
+            "ColumnKey": "",
+            "Column_Description": "Type of comparison (e.g., 'Tumor_vs_Normal', 'KRAS_mutant_vs_WT'). ALWAYS include in SELECT."
+          },
+          {
+            "ColumnName": "group_1",
+            "ColumnKey": "",
+            "Column_Description": "First group in comparison (numerator for fold change). Include for clarity."
+          },
+          {
+            "ColumnName": "group_2",
+            "ColumnKey": "",
+            "Column_Description": "Second group in comparison (denominator for fold change). Include for clarity."
+          },
+          {
+            "ColumnName": "fold_change",
+            "ColumnKey": "",
+            "Column_Description": "Linear fold change (group_1 / group_2). >1 = upregulated in group_1, <1 = downregulated."
+          },
+          {
+            "ColumnName": "log2_fold_change",
+            "ColumnKey": "",
+            "Column_Description": "Log2 fold change. Positive = upregulated in group_1, negative = downregulated. |log2FC| > 1 is typically significant (2-fold change). PREFERRED metric for differential expression."
+          },
+          {
+            "ColumnName": "p_value",
+            "ColumnKey": "",
+            "Column_Description": "Statistical p-value for differential expression (if computed). <0.05 typically considered significant."
+          },
+          {
+            "ColumnName": "adj_p_value",
+            "ColumnKey": "",
+            "Column_Description": "Adjusted p-value (FDR corrected). Use this for multiple testing correction. Preferred over raw p_value."
+          }
+        ]
+      }
+    ]
+  }
+}
