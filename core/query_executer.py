@@ -8,17 +8,12 @@ import sqlparse
 from sqlparse.tokens import DML, Keyword, Whitespace, Punctuation
 from utility.decorators import time_it
 
-dbs_info()
-fetch_table_description()
+# Global variables for lazy initialization
+_engines = None
+_sessions = None
+_initialized = False
 
-# Example dictionary with database names as keys and URLs as values
-db_info = {}
-
-list_db_names = globals.databases_dict.keys() # List of DB Names
-for db_name in list_db_names:
-            db_info[db_name] = globals.databases_dict[db_name]['string'] # Add db_string to db_info
-
-# Create a function to initialize connection pools for multiple databases``
+# Create a function to initialize connection pools for multiple databases
 @time_it
 def create_engines(db_info):
     engines = {}
@@ -31,14 +26,14 @@ def create_engines(db_info):
                 max_overflow=10,
                 pool_timeout=30,
                 pool_recycle=1800,
-                pool_pre_ping=True  
+                pool_pre_ping=True
             )
             engines[db_name] = engine
-            
+
             # Prime the connection pool with a simple query
             with engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
-            
+
             session_factory = sessionmaker(bind=engine)
             sessions[db_name] = scoped_session(session_factory)
 
@@ -53,9 +48,92 @@ def create_engines(db_info):
         raise
 
 
-# Initialize engines and session makers
+def _ensure_initialized():
+    """
+    Lazy initialization of database engines and sessions.
+    Called on first use to ensure databases_dict is populated.
+    """
+    global _engines, _sessions, _initialized
 
-engines, sessions = create_engines(db_info)
+    if _initialized:
+        return
+
+    try:
+        # Load database info if not already loaded
+        if not globals.databases_dict:
+            print(colored("Loading database schemas...", "yellow"))
+            dbs_info()
+            fetch_table_description()
+
+        # Build db_info dictionary
+        db_info = {}
+        for db_name in globals.databases_dict.keys():
+            db_info[db_name] = globals.databases_dict[db_name]['string']
+
+        # Create engines and sessions
+        if db_info:
+            _engines, _sessions = create_engines(db_info)
+            _initialized = True
+        else:
+            print(colored("⚠️  No databases found in databases_dict", "yellow"))
+            _engines = {}
+            _sessions = {}
+            _initialized = True
+
+    except Exception as e:
+        print(colored(f"⚠️  Error initializing database engines: {e}", "red"))
+        _engines = {}
+        _sessions = {}
+        _initialized = True
+
+
+# Getter functions to ensure lazy initialization
+def get_engines():
+    """Get engines, initializing if needed"""
+    _ensure_initialized()
+    return _engines
+
+def get_sessions():
+    """Get sessions, initializing if needed"""
+    _ensure_initialized()
+    return _sessions
+
+# Backward compatibility: initialize on first access
+class LazyEngines:
+    def __getitem__(self, key):
+        return get_engines()[key]
+
+    def keys(self):
+        return get_engines().keys()
+
+    def values(self):
+        return get_engines().values()
+
+    def items(self):
+        return get_engines().items()
+
+    def get(self, key, default=None):
+        return get_engines().get(key, default)
+
+class LazySessions:
+    def __getitem__(self, key):
+        return get_sessions()[key]
+
+    def keys(self):
+        return get_sessions().keys()
+
+    def values(self):
+        return get_sessions().values()
+
+    def items(self):
+        return get_sessions().items()
+
+    def get(self, key, default=None):
+        return get_sessions().get(key, default)
+
+# Export lazy wrappers to maintain backward compatibility
+engines = LazyEngines()
+sessions = LazySessions()
 
 # @time_it
 # def is_safe_query(query):
