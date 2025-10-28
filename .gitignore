@@ -93,6 +93,7 @@ railway.json
 *.db
 !data/app_storage.db
 !data/moi_ops.db
+!NSLC/bio_gene_expression.db
 *.db-backup
 *.db.bak
 hierarchical_data.db
