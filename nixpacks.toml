@@ -5,6 +5,7 @@ nixPkgs = ["python310", "git-lfs"]
 cmds = [
   "git lfs install",
   "git lfs pull",
+  "ls -lh NSLC/bio_gene_expression.db || echo 'Database file not found after git lfs pull!'",
   "pip install -r requirements.txt"
 ]
 
