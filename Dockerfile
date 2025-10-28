@@ -3,19 +3,26 @@ FROM python:3.10.13
 
 RUN pip install --upgrade pip
 
-# Install Git LFS
+# Install wget for downloading LFS file
 RUN apt-get update && \
-    apt-get install -y git-lfs && \
-    git lfs install
+    apt-get install -y wget
 
 WORKDIR /app
 COPY . .
 
-# Pull LFS files (including the bio database)
-RUN git lfs pull || echo "Git LFS pull failed or no LFS files"
+# Download the actual LFS file from GitHub
+# Get the LFS pointer and extract the OID
+RUN LFS_OID=$(grep 'oid sha256:' NSLC/bio_gene_expression.db | cut -d':' -f2 | tr -d ' ') && \
+    echo "Downloading LFS file with OID: $LFS_OID" && \
+    wget -O NSLC/bio_gene_expression.db \
+    "https://media.githubusercontent.com/media/schaaya/Bio-Agent/main/NSLC/bio_gene_expression.db" || \
+    echo "WARNING: Failed to download database file"
 
-# Verify the database file exists
-RUN ls -lh NSLC/bio_gene_expression.db || echo "WARNING: Database file not found!"
+# Verify the database file exists and is large enough
+RUN ls -lh NSLC/bio_gene_expression.db && \
+    FILE_SIZE=$(stat -c%s NSLC/bio_gene_expression.db) && \
+    echo "Database file size: $FILE_SIZE bytes" && \
+    [ "$FILE_SIZE" -gt 100000000 ] || echo "WARNING: Database file seems too small!"
 # Install Python dependencies
 RUN pip install -r requirements.txt
  
