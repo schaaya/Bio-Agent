@@ -20,6 +20,34 @@ def create_engines(db_info):
     sessions = {}
     try:
         for db_name, db_url in db_info.items():
+            print(colored(f"Creating engine for {db_name}: {db_url}", "cyan"))
+
+            # For SQLite databases, convert relative paths to absolute paths
+            if db_url.startswith("sqlite:///") and not db_url.startswith("sqlite:////"):
+                # Extract the relative path after sqlite:///
+                relative_path = db_url.replace("sqlite:///", "")
+
+                # If it's not an absolute path, make it absolute relative to /app
+                if not relative_path.startswith("/"):
+                    import os
+                    absolute_path = os.path.abspath(relative_path)
+                    db_url_absolute = f"sqlite:///{absolute_path}"
+                    print(colored(f"  Converting relative path to absolute:", "yellow"))
+                    print(colored(f"    Original: {db_url}", "yellow"))
+                    print(colored(f"    Absolute: {db_url_absolute}", "yellow"))
+
+                    # Check if file exists
+                    if os.path.exists(absolute_path):
+                        print(colored(f"  ✓ File exists: {absolute_path}", "green"))
+                        db_url = db_url_absolute
+                    else:
+                        print(colored(f"  ✗ File not found: {absolute_path}", "red"))
+                        # List files in the directory to help debug
+                        dir_path = os.path.dirname(absolute_path)
+                        if os.path.exists(dir_path):
+                            files = os.listdir(dir_path)
+                            print(colored(f"  Files in {dir_path}: {files[:10]}", "yellow"))
+
             engine = create_engine(
                 db_url,
                 pool_size=5, # Increase the pool size if you have a large number of tables
@@ -42,7 +70,9 @@ def create_engines(db_info):
         return engines, sessions
 
     except Exception as e:
-        print(f"Error in create_engines: {e}")
+        print(colored(f"Error in create_engines: {e}", "red"))
+        import traceback
+        print(colored(traceback.format_exc(), "red"))
         for engine in engines.values():
             engine.dispose()
         raise
