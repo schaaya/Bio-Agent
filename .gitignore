@@ -107,3 +107,9 @@ BOS_Data_*/
 !NSLC/sample_map.tsv
 !hgnc_complete_set.benchling_parse.071023.v2.tsv
 *.sql
+*.dump
+
+# ============================================================================
+# Screenshots and Images
+# ============================================================================
+image*.png
