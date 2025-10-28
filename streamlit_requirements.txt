@@ -1,0 +1,8 @@
+streamlit
+websockets
+plotly
+pandas
+requests
+python-dotenv
+reportlab
+kaleido
