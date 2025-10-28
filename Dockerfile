@@ -3,8 +3,19 @@ FROM python:3.10.13
 
 RUN pip install --upgrade pip
 
+# Install Git LFS
+RUN apt-get update && \
+    apt-get install -y git-lfs && \
+    git lfs install
+
 WORKDIR /app
 COPY . .
+
+# Pull LFS files (including the bio database)
+RUN git lfs pull || echo "Git LFS pull failed or no LFS files"
+
+# Verify the database file exists
+RUN ls -lh NSLC/bio_gene_expression.db || echo "WARNING: Database file not found!"
 # Install Python dependencies
 RUN pip install -r requirements.txt
  
@@ -33,8 +44,8 @@ ENV TZ=Asia/Kolkata
 # Install libGL for OpenCV
 RUN apt-get update && apt-get install -y libgl1 && rm -rf /var/lib/apt/lists/*
  
-# Expose port 8400
-EXPOSE 8400
- 
+# Expose port 8000 (Railway uses PORT env var)
+EXPOSE 8000
+
 # Define the command to run the app using uvicorn
-CMD ["uvicorn", "main:app", "--workers", "4", "--port", "8400", "--host", "0.0.0.0"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
